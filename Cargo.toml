@@ -1,0 +1,12 @@
+[package]
+name = "TypeRacer"
+version = "0.1.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+crossterm = "0.29.0"
+ratatui = "0.30.0"
+tauri = "2.9.5"
+tui-big-text = "0.8.1"
