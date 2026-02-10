@@ -30,13 +30,13 @@ pub(crate) fn draw(frame: &mut Frame) {
     ]).split(right_area);
 
     let timer_area = right_rows[0];
-    let start_area = right_rows[1];
+    let button_area = right_rows[1];
     let wpm_area = right_rows[2];
 
     frame.render_widget(sentence_text(), left_area);
     frame.render_widget(title(), title_area);
     frame.render_widget(timer_text(), timer_area.inner(Margin { vertical: 1, horizontal: 1 }));
-    frame.render_widget(start_text(), start_area);
+    frame.render_widget(button_text(), button_area);
     frame.render_widget(wpm_text(), wpm_area);
 
 }
@@ -74,7 +74,7 @@ fn timer_text() -> Paragraph<'static> {
     timer_text
 }
 
-fn start_text() -> Paragraph<'static> {
+fn button_text() -> Paragraph<'static> {
     let start_block = Block::default().borders(Borders::ALL);
     let start_text = Paragraph::new(Line::from(Span::styled(
         "[ Start ]",
