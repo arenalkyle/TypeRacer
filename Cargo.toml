@@ -8,5 +8,4 @@ edition = "2024"
 [dependencies]
 crossterm = "0.29.0"
 ratatui = "0.30.0"
-tauri = "2.9.5"
-tui-big-text = "0.8.1"
+rand = "0.10.0"

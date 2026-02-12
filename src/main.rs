@@ -1,16 +1,22 @@
-mod type_racer_game;
 mod terminal_draw;
+mod type_racer_game;
 
 use std::io;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
 use crossterm::{event, execute};
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, MouseEventKind};
-use ratatui::DefaultTerminal;
+use crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, MouseEventKind,
+};
 use ratatui::layout::Rect;
+use ratatui::DefaultTerminal;
+
 use crate::terminal_draw::draw;
 use crate::type_racer_game::TypeRacerGame;
 
-fn main() -> io::Result<()>  {
+const ROUND_SECS: u64 = 30;
+
+fn main() -> io::Result<()> {
     let mut app = App::new();
     execute!(io::stdout(), EnableMouseCapture)?;
     let result = app.run();
@@ -23,75 +29,154 @@ struct App {
     game: TypeRacerGame,
     terminal: DefaultTerminal,
     should_quit: bool,
-    button_area: Option<Rect>
+    button_area: Option<Rect>,
+
+    deadline: Option<Instant>,
+    remaining_secs: u64,
+    last_wpm: u32,
 }
 
 impl App {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         Self {
             game: TypeRacerGame::new(),
             terminal: ratatui::init(),
             should_quit: false,
-            button_area: None
+            button_area: None,
+
+            deadline: None,
+            remaining_secs: ROUND_SECS,
+            last_wpm: 0,
         }
     }
 
     pub fn run(&mut self) -> io::Result<()> {
         while !self.should_quit {
-            self.terminal.draw(draw)?;
-            self.keep_alive()?;
+            let timer_text = format_timer(self.remaining_secs);
+            let button_label = if self.game.is_started() { "Stop" } else { "Start" };
+
+            self.terminal.draw(|frame| {
+                draw(
+                    frame,
+                    &self.game,
+                    &mut self.button_area,
+                    &timer_text,
+                    self.last_wpm,
+                    button_label,
+                )
+            })?;
+
+            self.should_quit = self.keep_alive()?;
         }
         Ok(())
     }
 
-    fn keep_alive(&mut self) -> io::Result<bool> {
-        if !event::poll(Duration::from_millis(16))? {
-            return Ok(false);
+    fn start_round(&mut self) {
+        self.game.start();
+        self.deadline = Some(Instant::now() + Duration::from_secs(ROUND_SECS));
+        self.remaining_secs = ROUND_SECS;
+        self.last_wpm = 0;
+    }
+
+    fn stop_round(&mut self) {
+        self.game.stop();
+
+        self.deadline = None;
+        self.remaining_secs = ROUND_SECS;
+
+        if let Some(wpm) = self.game.calculate_wpm() {
+            self.last_wpm = wpm;
+        }
+    }
+
+    fn update_timer(&mut self) {
+        if !self.game.is_started() {
+            return;
+        }
+        let Some(deadline) = self.deadline else {
+            return;
+        };
+
+        let now = Instant::now();
+        if now >= deadline {
+            self.remaining_secs = 0;
+            self.stop_round(); // force stop at 0
+            return;
         }
 
-        match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-                KeyCode::Esc => {
-                    if self.game.is_started() {
-                        self.game.stop();
-                        Ok(false)
-                    } else {
-                        Ok(true)
-                    }
-                },
-                KeyCode::Enter => {
-                    if self.game.is_started() {
-                        self.game.stop();
-                    } else {
-                        self.game.start();
-                    }
-                    Ok(false)
-                },
-                _ => Ok(false),
-            },
-            Event::Mouse(mouse) => {
-                if matches!(mouse.kind, MouseEventKind::Down(_)) {
-                    if let Some(area) = self.button_area {
-                        let x = mouse.column;
-                        let y = mouse.row;
+        self.remaining_secs = deadline.duration_since(now).as_secs().min(ROUND_SECS);
+    }
 
-                        let inside = x>= area.x
-                            && x < area.x + area.width
-                            && y >= area.y
-                            && y < area.y + area.height;
+    fn keep_alive(&mut self) -> io::Result<bool> {
+        let had_event = event::poll(Duration::from_millis(16))?;
+        if had_event {
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    if self.game.is_started() {
+                        match key.code {
+                            KeyCode::Char(c) => {
+                                if !key.modifiers.contains(event::KeyModifiers::CONTROL)
+                                    && !key.modifiers.contains(event::KeyModifiers::ALT)
+                                {
+                                    self.game.push_char(c);
+                                }
+                            }
+                            KeyCode::Backspace => self.game.backspace(),
+                            KeyCode::Tab => self.game.push_char('\t'),
+                            _ => {}
+                        }
 
-                        if inside {
-                            if self.game.is_started() {
-                                self.game.stop();
-                            } else {
-                                self.game.start();
+                        // Stop immediately on exact match
+                        if self.game.input() == self.game.sentence() {
+                            self.stop_round();
+                        }
+
+                        // Esc stops the round (doesn't quit)
+                        if matches!(key.code, KeyCode::Esc) && self.game.is_started() {
+                            self.stop_round();
+                        }
+                    } else {
+                        match key.code {
+                            KeyCode::Esc => return Ok(true),
+                            KeyCode::Enter => self.start_round(),
+                            _ => {}
+                        }
+                    }
+                }
+
+                Event::Mouse(mouse) => {
+                    if matches!(mouse.kind, MouseEventKind::Down(_)) {
+                        if let Some(area) = self.button_area {
+                            let x = mouse.column;
+                            let y = mouse.row;
+
+                            let inside = x >= area.x
+                                && x < area.x + area.width
+                                && y >= area.y
+                                && y < area.y + area.height;
+
+                            if inside {
+                                if self.game.is_started() {
+                                    self.stop_round();
+                                } else {
+                                    self.start_round();
+                                }
                             }
                         }
                     }
                 }
-                Ok(false)
+
+                _ => {}
             }
-            _ => Ok(false)
         }
+
+        self.update_timer();
+        Ok(false)
     }
+}
+
+fn format_timer(secs: u64) -> String {
+    let m = secs / 60;
+    let s = secs % 60;
+    format!("{m}:{s:02}")
 }
