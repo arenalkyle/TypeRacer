@@ -34,6 +34,9 @@ struct App {
     deadline: Option<Instant>,
     remaining_secs: u64,
     last_wpm: u32,
+
+    blink_on: bool,
+    next_blink_at: Instant,
 }
 
 impl App {
@@ -47,11 +50,16 @@ impl App {
             deadline: None,
             remaining_secs: ROUND_SECS,
             last_wpm: 0,
+
+            blink_on: true,
+            next_blink_at: Instant::now() + Duration::from_millis(500),
         }
     }
 
     pub fn run(&mut self) -> io::Result<()> {
         while !self.should_quit {
+            self.update_blink();
+
             let timer_text = format_timer(self.remaining_secs);
             let button_label = if self.game.is_started() { "Stop" } else { "Start" };
 
@@ -63,12 +71,21 @@ impl App {
                     &timer_text,
                     self.last_wpm,
                     button_label,
+                    self.blink_on,
                 )
             })?;
 
             self.should_quit = self.keep_alive()?;
         }
         Ok(())
+    }
+
+    fn update_blink(&mut self) {
+        let now = Instant::now();
+        if now >= self.next_blink_at {
+            self.blink_on = !self.blink_on;
+            self.next_blink_at = now + Duration::from_millis(500);
+        }
     }
 
     fn start_round(&mut self) {
@@ -126,12 +143,12 @@ impl App {
                             _ => {}
                         }
 
-                        // Stop immediately on exact match
+                        // Stop game when sentence matches
                         if self.game.input() == self.game.sentence() {
                             self.stop_round();
                         }
 
-                        // Esc stops the round (doesn't quit)
+                        // Esc stops the game
                         if matches!(key.code, KeyCode::Esc) && self.game.is_started() {
                             self.stop_round();
                         }

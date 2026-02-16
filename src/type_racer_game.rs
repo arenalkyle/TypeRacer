@@ -21,6 +21,7 @@ pub struct TypeRacerGame {
     input: String,
     started_at: Option<Instant>,
     finished_at: Option<Instant>,
+    has_error: bool,
 }
 
 impl TypeRacerGame {
@@ -30,6 +31,7 @@ impl TypeRacerGame {
             input: String::new(),
             started_at: None,
             finished_at: None,
+            has_error: false,
         }
     }
 
@@ -43,21 +45,21 @@ impl TypeRacerGame {
             self.started_at = Some(Instant::now());
             self.finished_at = None;
             self.input.clear();
+            self.has_error = false;
         }
     }
 
     pub fn stop(&mut self) {
-        // Keep started_at so elapsed/WPM still works after stopping.
         if self.started_at.is_some() && self.finished_at.is_none() {
             self.finished_at = Some(Instant::now());
         }
+        self.has_error = false;
     }
 
     pub fn is_running(&self) -> bool {
         self.started_at.is_some() && self.finished_at.is_none()
     }
 
-    // Backwards compatibility with your current App logic
     pub fn is_started(&self) -> bool {
         self.is_running()
     }
@@ -70,16 +72,35 @@ impl TypeRacerGame {
         &self.input
     }
 
+    pub fn cursor_index(&self) -> usize {
+        self.input.chars().count()
+    }
+
+    pub fn has_error(&self) -> bool {
+        self.has_error
+    }
+
     pub fn push_char(&mut self, c: char) {
         if !self.is_running() {
             return;
         }
 
-        self.input.push(c);
+        let idx = self.cursor_index();
+        let expected = self.sentence.chars().nth(idx);
 
-        // Stop condition inside game state (App will also react and stop the round)
-        if self.input == self.sentence {
-            self.finished_at = Some(Instant::now());
+        let Some(expected) = expected else {
+            return;
+        };
+
+        if c == expected {
+            self.input.push(c);
+            self.has_error = false;
+
+            if self.input == self.sentence {
+                self.finished_at = Some(Instant::now());
+            }
+        } else {
+            self.has_error = true;
         }
     }
 
@@ -87,7 +108,12 @@ impl TypeRacerGame {
         if !self.is_running() {
             return;
         }
-        self.input.pop();
+
+        if self.input.pop().is_some() {
+            self.has_error = false;
+        } else {
+            self.has_error = false;
+        }
     }
 
     pub fn elapsed(&self) -> Option<Duration> {
@@ -110,22 +136,4 @@ impl TypeRacerGame {
 
         Some(wpm.max(0.0) as u32)
     }
-}
-
-// (Unused helpers can stay for now)
-pub fn play_game(sentence: String) {
-    let mut user_input = String::new();
-    let _current_char = sentence.chars().nth(0).unwrap();
-    io::stdin()
-        .read_line(&mut user_input)
-        .expect("Failed to read line");
-}
-
-fn calculate_correct_string(string: String) -> usize {
-    string.len()
-}
-
-fn calculate_wpm(input: String, sentence: String) -> String {
-    let _ = input;
-    sentence
 }
