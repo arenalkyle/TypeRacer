@@ -108,11 +108,8 @@ impl TypeRacerGame {
             return;
         }
 
-        if self.input.pop().is_some() {
-            self.has_error = false;
-        } else {
-            self.has_error = false;
-        }
+        self.input.pop();
+        self.has_error = false;
     }
 
     pub fn elapsed(&self) -> Option<Duration> {
