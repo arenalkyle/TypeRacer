@@ -70,21 +70,24 @@ fn render_sentence_and_input(frame: &mut Frame, game: &TypeRacerGame, area: Rect
     frame.render_widget(block.clone(), area);
 
     let inner = block.inner(area);
+    let width = inner.width as usize;
+
+    let sentence_lines = wrapped_line_count(game.sentence(), width).max(1);
+    let input_lines = wrapped_line_count(game.input(), width).max(1);
 
     let rows = Layout::vertical([
-        Constraint::Length(1), // sentence
+        Constraint::Length(sentence_lines as u16), // sentence
         Constraint::Length(1), // blank line
-        Constraint::Length(1), // blank line
-        Constraint::Length(1), // input from player
+        Constraint::Length(input_lines as u16), // input from player
         Constraint::Min(0),
-    ]).split(inner);
+    ])
+        .split(inner);
 
-    let max_cols = inner.width as usize;
     let cursor = game.cursor_index();
     let has_error = game.has_error();
     let mut spans: Vec<Span<'static>> = Vec::new();
-    
-    for (i, ch) in game.sentence().chars().take(max_cols).enumerate() {
+
+    for (i, ch) in game.sentence().chars().enumerate() {
         let mut style = if i < cursor {
             Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
         } else if i == cursor && game.is_started() {
@@ -104,13 +107,31 @@ fn render_sentence_and_input(frame: &mut Frame, game: &TypeRacerGame, area: Rect
         spans.push(Span::styled(ch.to_string(), style));
     }
 
-    let sentence_line = Paragraph::new(Line::from(spans)).wrap(Wrap { trim: true });
+    let sentence_line = Paragraph::new(Line::from(spans))
+        .wrap(Wrap { trim: false });
     frame.render_widget(sentence_line, rows[0]);
 
-    let input_line = truncate_to_cols(game.input(), max_cols);
-    let input = Paragraph::new(input_line).style(Style::default().fg(Color::Yellow)).wrap(Wrap { trim: true });
+    let input = Paragraph::new(game.input().to_string())
+        .style(Style::default().fg(Color::Yellow))
+        .wrap(Wrap { trim: false });
 
-    frame.render_widget(input, rows[3]);
+    frame.render_widget(input, rows[2]);
+}
+
+fn wrapped_line_count(text: &str, width: usize) -> usize {
+    if width == 0 {
+        return 1;
+    }
+
+    let mut line_count = 0usize;
+
+    for raw_line in text.lines() {
+        let len = raw_line.chars().count();
+        let wrapped = (len + width.saturating_sub(1)) / width;
+        line_count += wrapped.max(1);
+    }
+
+    line_count.max(1)
 }
 
 fn truncate_to_cols(s: &str, max_cols: usize) -> String {

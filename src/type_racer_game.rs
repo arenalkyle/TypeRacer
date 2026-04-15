@@ -108,6 +108,11 @@ impl TypeRacerGame {
             return;
         }
 
+        if self.has_error {
+            self.has_error = false;
+            return;
+        }
+
         self.input.pop();
         self.has_error = false;
     }
