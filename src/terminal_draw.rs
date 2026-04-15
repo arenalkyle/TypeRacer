@@ -134,13 +134,6 @@ fn wrapped_line_count(text: &str, width: usize) -> usize {
     line_count.max(1)
 }
 
-fn truncate_to_cols(s: &str, max_cols: usize) -> String {
-    if max_cols == 0 {
-        return String::new();
-    }
-    s.chars().take(max_cols).collect()
-}
-
 fn timer_text(value: &str) -> Paragraph<'static> {
     let timer_block = Block::default().title("Timer").title_alignment(Alignment::Center).borders(Borders::ALL);
 
