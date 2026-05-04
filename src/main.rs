@@ -11,7 +11,7 @@ use crossterm::event::{
 use ratatui::layout::Rect;
 use ratatui::DefaultTerminal;
 
-use crate::terminal_draw::draw;
+use crate::terminal_draw::TerminalDraw;
 use crate::type_racer_game::TypeRacerGame;
 
 const ROUND_SECS: u64 = 30;
@@ -27,6 +27,7 @@ fn main() -> io::Result<()> {
 
 struct App {
     game: TypeRacerGame,
+    terminal_draw: TerminalDraw,
     terminal: DefaultTerminal,
     should_quit: bool,
     button_area: Option<Rect>,
@@ -43,6 +44,7 @@ impl App {
     pub fn new() -> Self {
         Self {
             game: TypeRacerGame::new(),
+            terminal_draw: TerminalDraw::new(),
             terminal: ratatui::init(),
             should_quit: false,
             button_area: None,
@@ -64,7 +66,7 @@ impl App {
             let button_label = if self.game.is_started() { "Stop" } else { "Start" };
 
             self.terminal.draw(|frame| {
-                draw(
+                self.terminal_draw.draw(
                     frame,
                     &self.game,
                     &mut self.button_area,
